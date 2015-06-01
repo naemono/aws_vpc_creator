@@ -1,0 +1,141 @@
+{
+  "mapping": {
+    "utility-tier": "sg-012344",
+    "preprod-public-tier": "sg-0123498",
+    "preprod-backend-tier": "sg-01234987"
+  },
+  "rules": [
+    {
+      "targetSecGroupName": "utility-tier",
+      "type": "ingress",
+      "protocol": "tcp",
+      "fromPort": 80,
+      "toPort": 80,
+      "target": {
+        "type": "cidr",
+        "data": "0.0.0.0/0"
+      }
+    },
+    {
+      "targetSecGroupName": "utility-tier",
+      "type": "ingress",
+      "protocol": "tcp",
+      "fromPort": 443,
+      "toPort": 443,
+      "target": {
+        "type": "cidr",
+        "data": "0.0.0.0/0"
+      }
+    },
+    {
+      "targetSecGroupName": "preprod-public-tier",
+      "type": "ingress",
+      "protocol": "tcp",
+      "fromPort": 22,
+      "toPort": 22,
+      "target": {
+        "type": "securityGroup",
+        "data": "utility-tier"
+      }
+    },
+    {
+      "targetSecGroupName": "preprod-public-tier",
+      "type": "ingress",
+      "protocol": "tcp",
+      "fromPort": 80,
+      "toPort": 80,
+      "target": {
+        "type": "cidr",
+        "data": "0.0.0.0/0"
+      }
+    },
+    {
+      "targetSecGroupName": "preprod-public-tier",
+      "type": "ingress",
+      "protocol": "tcp",
+      "fromPort": 443,
+      "toPort": 443,
+      "target": {
+        "type": "cidr",
+        "data": "0.0.0.0/0"
+      }
+    },
+    {
+      "targetSecGroupName": "preprod-public-tier",
+      "type": "ingress",
+      "protocol": "tcp",
+      "fromPort": 0,
+      "toPort": 65535,
+      "target": {
+        "type": "securityGroup",
+        "data": "utility-tier"
+      }
+    },
+    {
+      "targetSecGroupName": "preprod-public-tier",
+      "type": "egress",
+      "protocol": "tcp",
+      "fromPort": 80,
+      "toPort": 80,
+      "target": {
+        "type": "cidr",
+        "data": "0.0.0.0/0"
+      }
+    },
+    {
+      "targetSecGroupName": "preprod-public-tier",
+      "type": "egress",
+      "protocol": "tcp",
+      "fromPort": 53,
+      "toPort": 53,
+      "target": {
+        "type": "cidr",
+        "data": "0.0.0.0/0"
+      }
+    },
+    {
+      "targetSecGroupName": "preprod-public-tier",
+      "type": "egress",
+      "protocol": "udp",
+      "fromPort": 53,
+      "toPort": 53,
+      "target": {
+        "type": "cidr",
+        "data": "0.0.0.0/0"
+      }
+    },
+    {
+      "targetSecGroupName": "preprod-public-tier",
+      "type": "egress",
+      "protocol": "tcp",
+      "fromPort": 443,
+      "toPort": 443,
+      "target": {
+        "type": "cidr",
+        "data": "0.0.0.0/0"
+      }
+    },
+    {
+      "targetSecGroupName": "preprod-public-tier",
+      "type": "egress",
+      "protocol": "all",
+      "fromPort": 0,
+      "toPort": 65535,
+      "target": {
+        "type": "securityGroup",
+        "data": "preprod-backend-tier"
+      }
+    },
+    {
+      "targetSecGroupName": "preprod-public-tier",
+      "type": "egress",
+      "protocol": "icmp",
+      "fromPort": 0,
+      "toPort": 65535,
+      "target": {
+        "type": "cidr",
+        "data": "0.0.0.0/0"
+      }
+    }
+  ]
+}

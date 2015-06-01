@@ -1,8 +1,10 @@
 require 'netaddr'
+require 'aws-sdk'
+require 'json'
 require_relative './configuration'
 require_relative './vpc_creator/client'
+require_relative './vpc_creator/security_groups'
 require_relative './errors'
-require 'aws-sdk'
 
 module XO
   module AWS

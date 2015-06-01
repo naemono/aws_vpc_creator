@@ -18,7 +18,9 @@ module XO
           attr_accessor(*VALID_OPTIONS)
 
           def initialize
+            @errors = []
             test_aws_credentials
+
           end # initialize
 
           def self.options
@@ -59,6 +61,15 @@ module XO
                 end
               end
           end # test_aws_credentials
+
+          def self.valid_config?
+          [:cidr, :name, :num_availability_zones].each do |c|
+            if instance_variable_get("@#{c}").nil?
+              @errors.push("#{c} is required")
+            end
+          end
+          @errors.size > 0 ? false : true
+        end # valid_config?
 
         end # Config
       end # VpcCreator
