@@ -9,6 +9,7 @@ module XO
 
           def initialize(options={})
             @errors = []
+            @logger = Logger.new('vpc-creator.log')
             o = XO::AWS::Tools::VpcCreator::Configuration.options.merge(options)
             Configuration::VALID_OPTIONS.each do |key|
               # calls Client.key = for each Configuration option
@@ -53,6 +54,7 @@ module XO
         end # valid_config?
 
           def check_response(response)
+            @logger.info("Checking response: #{response.data}")
             if response.successful?
               return {success: true, errors: []}.merge({response: response.data})
             else
@@ -71,6 +73,7 @@ module XO
           end # check_tag_object
 
           def tag_object(obj, tags, options={})
+            @logger.info("Tagging object: #{obj}, with these tags: #{tags}")
             errors = check_tag_object(obj, tags)
             raise XO::AWS::Tools::VpcCreator::ValidationError, errors.join(',') if
               (errors.length > 0)
@@ -89,6 +92,7 @@ module XO
 
           def create_vpc(options={})
             params = {cidr_block: @cidr.to_s, instance_tenancy: 'default'}.merge(options)
+            @logger.info("Creating a vpc with these options: #{params}")
             response = @ec2_client.create_vpc(params)
             @vpc_id = response.data.vpc[:vpc_id] if response.successful?
             res = check_response(response)
@@ -97,17 +101,18 @@ module XO
             tag_object(@vpc_id, {key: 'Name', value: name})
             return res
           rescue Aws::EC2::Errors::DryRunOperation => e
-            @vpc_id = '1234567890'
+            @vpc_id ||= '1234567890'
             return {success: true, errors: [], response: 'dry run successful'}
           end # create_vpc
 
           def delete_vpc(options={})
             raise XO::AWS::Tools::VpcCreator::VpcNotReadyError if !vpc_ready?
             params = {vpc_id: @vpc_id.to_s}.merge(options)
+            @logger.info("Deleting a vpc with these options: #{params}")
             response = @ec2_client.delete_vpc(params)
             return check_response(response)
           rescue Aws::EC2::Errors::DryRunOperation => e
-            @vpc_id = '1234567890'
+            @vpc_id ||= '1234567890'
             return {success: true, errors: [], response: 'dry run successful'}
           end # create_vpc
 
@@ -117,6 +122,7 @@ module XO
             params = {
               vpc_ids: [@vpc_id]
             }.merge!(options)
+            @logger.info("Checking to see if vpc is ready with these options: #{params}")
             response = @ec2_client.describe_vpcs(params)
             print "response: #{response}\n"
             if response.successful? && response.data.vpcs[0].state == 'available'
@@ -158,14 +164,15 @@ module XO
               options[:availability_zone] + '-private'
             options.delete(:public)
             params = {cidr_block: options[:cidr_block], vpc_id: @vpc_id}.merge(options)
+            @logger.info("Creating a subnet with these options: #{params}")
             response = @ec2_client.create_subnet(params)
+            puts "create_subnet response: #{response.data.inspect}"
             res = check_response(response)
-
-            tag_object(res[:response][:subnet_id], {key: 'Name', value: name}) if
-              res[:response][:subnet_id]
+            tag_object(res[:response][0].subnet_id, {key: 'Name', value: name}) if
+              res[:response][0].subnet_id
             return res
           rescue Aws::EC2::Errors::DryRunOperation => e
-            @vpc_id = '1234567890'
+            @vpc_id ||= '1234567890'
             return {success: true, errors: [], response: 'dry run successful'}
           end #create_subnet
 
@@ -173,10 +180,11 @@ module XO
             raise XO::AWS::Tools::VpcCreator::ValidationError, 'Key Name is required' if
               (name.nil?)
             params = {key_name: name}.merge(options)
+            @logger.info("Creating a key pair with these options: #{params}")
             response = @ec2_client.create_key_pair(params)
             return check_response(response)
           rescue Aws::EC2::Errors::DryRunOperation => e
-            @vpc_id = '1234567890'
+            @vpc_id ||= '1234567890'
             return {success: true, errors: [], response: 'dry run successful'}
           end #create_subnet
 
@@ -191,11 +199,16 @@ module XO
             errors = check_security_group(name, description)
             raise XO::AWS::Tools::VpcCreator::ValidationError, errors.join(',') if
               errors.length > 0
-            params = {group_name: name, description: description}.merge(options)
+            params = {
+              group_name: name,
+              description: description,
+              vpc_id: @vpc_id
+            }.merge(options)
+            @logger.info("Creating a security group with these options: #{params}")
             response = @ec2_client.create_security_group(params)
             return check_response(response)
           rescue Aws::EC2::Errors::DryRunOperation => e
-            @vpc_id = '1234567890'
+            @vpc_id ||= '1234567890'
             return {success: true, errors: [], response: 'dry run successful'}
           end #create_subnet
 
@@ -261,10 +274,7 @@ module XO
             raise XO::AWS::Tools::VpcCreator::ValidationError, errors.join(',') if
               errors.length > 0
             params = {}
-            protocol = -1 if protocol.include?('all') and type.include?('ingress')
-            if protocol.include?('all') and type.include?('egress')
-              protocol = 'tcp'
-            end
+            protocol = '-1' if protocol.include?('all')
 
             if options.include? :cidr
               #params.merge!({cidr_ip: options[:cidr]})
@@ -287,13 +297,17 @@ module XO
             elsif options.include? :sec_group and type.include?('ingress')
               sec_group = security_group(options[:sec_group])
               params.merge!({
-                source_security_group_name: id,
                 group_id: sec_group,
                 ip_permissions: [
                   {
                     ip_protocol: protocol,
                     from_port: from,
-                    to_port: to
+                    to_port: to,
+                    user_id_group_pairs: [
+                      {
+                        group_id: id
+                      }
+                    ]
                   }
                 ]
               })
@@ -318,12 +332,6 @@ module XO
               options.delete(:sec_group)
             end
 
-            params.merge!(
-              {
-                dry_run: true
-              }
-            )
-
             case type
             when 'ingress'
               method = 'authorize_security_group_ingress'
@@ -333,10 +341,12 @@ module XO
               raise XO::AWS::Tools::VpcCreator::ValidationError,
                 "Type (ingress/egress) is not valid"
             end
+            @logger.info("Adding rule to seg group using this method: #{method}"\
+              " with these options: #{params}")
             response = @ec2_client.send(method, params)
             return check_response(response)
           rescue Aws::EC2::Errors::DryRunOperation => e
-            @vpc_id = '1234567890'
+            @vpc_id ||= '1234567890'
             return {success: true, errors: [], response: 'dry run successful'}
           end # authorize_security_group
 
@@ -385,13 +395,19 @@ module XO
                   options_hash.merge!({ sec_group: target_data })
                 end
                 sec_group_id = security_group(target)
-                authorize_security_group(type,sec_group_id, protocol, f_port, t_port,
-                  options_hash.merge(options))
+                begin
+                  authorize_security_group(type,sec_group_id, protocol, f_port, t_port,
+                    options_hash.merge(options))
+                rescue Aws::EC2::Errors::InvalidPermissionDuplicate
+                  @logger.info('duplicate rule, continuing.')
+                  next
+                end
               end
             end
             return true
+
           rescue => e
-            puts "Uncaught exception in process_rules: #{e.message}\n#{e.backtrace}"
+            puts "Uncaught exception in process_rules: #{e.inspect}\n#{e.message}\n#{e.backtrace}"
             return false
           end # process_rules
 
